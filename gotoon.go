@@ -1,5 +1,3 @@
-// Package gotoon is a Go library for accessing the [Toon](https://www.toon.eu) smart thermostat,
-// using the [Toon RESTful API](https://developer.toon.eu).
 package gotoon
 
 import (
