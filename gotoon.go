@@ -1,4 +1,6 @@
-package toonapilib
+// Package gotoon is a Go library for accessing the [Toon](https://www.toon.eu) smart thermostat,
+// using the [Toon RESTful API](https://developer.toon.eu).
+package gotoon
 
 import (
 	"encoding/json"
@@ -145,8 +147,40 @@ func (t *Toon) getAccessToken() (err error) {
 	return
 }
 
+func (t *Toon) hasValidToken() (isValid bool) {
+
+	// the accessToken is not set
+	if &(t.accessToken) == nil {
+		isValid = false
+		return
+	}
+
+	// the refresh token has been expired
+	if t.accessToken.RefreshTokenExpiresAt.After(time.Now()) {
+		isValid = false
+		return
+	}
+
+	// the token has expired; but we can try to renew the token
+	if t.accessToken.ExpiresAt.After(time.Now()) {
+		// TODO: try to refresh the token using the token refresh function
+		isValid = false
+		return
+	}
+
+	isValid = true
+	return
+}
+
 // GetAgreements gets identifier information of accessible Toon devices.
 func (t *Toon) GetAgreements() (agreements []Agreement, err error) {
+
+	if t.hasValidToken() {
+		if err = t.getAccessToken(); err != nil {
+			return
+		}
+	}
+
 	c := newHTTPSClient()
 	req, err := http.NewRequest("GET", agreementURL, nil)
 	if err != nil {
