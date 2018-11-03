@@ -22,8 +22,10 @@ const (
 type Token struct {
 	AccessToken           string `json:"access_token"`
 	ExpiresIn             int    `json:"expires_in,string"`
+	ExpiresAt             time.Time
 	RefreshToken          string `json:"refresh_token"`
 	RefreshTokenExpiresIn int    `json:"refresh_token_expires_in,string"`
+	RefreshTokenExpiresAt time.Time
 }
 
 // Agreement defines the data structure of the Toon API agreement. See https://developer.toon.eu/api-intro.
@@ -116,6 +118,9 @@ func (t *Toon) getAccessToken() (err error) {
 	v.Set("client_secret", t.ConsumerSecret)
 	v.Set("grant_type", "authorization_code")
 	v.Set("code", code)
+
+	// current time
+	tnow := time.Now()
 	r, err = c.PostForm(tokenURL, v)
 	if err != nil {
 		return
@@ -132,6 +137,10 @@ func (t *Toon) getAccessToken() (err error) {
 	if err = json.Unmarshal(bodyBytes, &(t.accessToken)); err != nil {
 		return
 	}
+
+	// derive ExpiresAt = tnow + (ExpiresIn - 180)s
+	t.accessToken.ExpiresAt = tnow.Add(time.Second * time.Duration(t.accessToken.ExpiresIn-180))
+	t.accessToken.RefreshTokenExpiresAt = tnow.Add(time.Second * time.Duration(t.accessToken.RefreshTokenExpiresIn-180))
 
 	return
 }
