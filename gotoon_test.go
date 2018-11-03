@@ -32,7 +32,7 @@ func TestGetAgreements(t *testing.T) {
 	}
 }
 
-// This function shows how of getting Toon API agreements.
+// The code below shows how of getting Toon API agreements.
 func ExampleToon_GetAgreements() {
 	toon := gotoon.Toon{
 		Username:       "myEnecoUsername",

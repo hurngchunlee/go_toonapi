@@ -20,7 +20,7 @@ const (
 	agreementURL = "https://api.toon.eu/toon/v3/agreements"
 )
 
-// Token defines the data structure of the Toon API access token.
+// Token holds the data structure of the Toon API access token.
 type Token struct {
 	AccessToken           string `json:"access_token"`
 	ExpiresIn             int    `json:"expires_in,string"`
@@ -30,7 +30,7 @@ type Token struct {
 	RefreshTokenExpiresAt time.Time
 }
 
-// Agreement defines the data structure of the Toon API agreement. See https://developer.toon.eu/api-intro.
+// Agreement holds the data structure of the Toon API agreement. See https://developer.toon.eu/api-intro.
 type Agreement struct {
 	AgreementID            string `json:"agreementId"`
 	AgreementIDChecksum    string `json:"agreementIdChecksum"`
