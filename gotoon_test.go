@@ -2,9 +2,10 @@ package gotoon_test
 
 import (
 	"fmt"
-	"gotoon"
 	"os"
 	"testing"
+
+	"github.com/hurngchunlee/gotoon"
 )
 
 var toon gotoon.Toon
@@ -32,7 +33,7 @@ func TestGetAgreements(t *testing.T) {
 }
 
 // This function shows how of getting Toon API agreements.
-func ExampleGetAgreements() {
+func ExampleToon_GetAgreements() {
 	toon := gotoon.Toon{
 		Username:       "myEnecoUsername",
 		Password:       "myEnecoPassword",
