@@ -154,16 +154,17 @@ func (t *Toon) hasValidToken() (isValid bool) {
 	}
 
 	// the refresh token has been expired
-	if t.accessToken.RefreshTokenExpiresAt.After(time.Now()) {
+	if t.accessToken.RefreshTokenExpiresAt.Before(time.Now()) {
 		isValid = false
 		return
 	}
 
 	// the token has expired; but we can try to renew the token
-	if t.accessToken.ExpiresAt.After(time.Now()) {
-		// TODO: try to refresh the token using the token refresh function
+	if t.accessToken.ExpiresAt.Before(time.Now()) {
 		isValid = false
 		return
+	} else {
+		// TODO: try to refresh the token using the token refresh function
 	}
 
 	isValid = true
@@ -173,7 +174,7 @@ func (t *Toon) hasValidToken() (isValid bool) {
 // GetAgreements gets identifier information of accessible Toon devices.
 func (t *Toon) GetAgreements() (agreements []Agreement, err error) {
 
-	if t.hasValidToken() {
+	if ! t.hasValidToken() {
 		if err = t.getAccessToken(); err != nil {
 			return
 		}
