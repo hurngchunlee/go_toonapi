@@ -5,18 +5,56 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
 const (
 	authorizeURL = "https://api.toon.eu/authorize"
 	tokenURL     = "https://api.toon.eu/token"
-	agreementURL = "https://api.toon.eu/toon/v3/agreements"
+	apiBaseURL   = "https://api.toon.eu/toon/v3"
 )
+
+// jsonTime defines customized JSON marshal and unmarshal functions
+// for converting timestamp into Time struct.
+type jsonTime time.Time
+
+// MarshalJSON marshals Time struct into timestamp integer in milliseconds.
+func (t jsonTime) MarshalJSON() ([]byte, error) {
+	return []byte(strconv.FormatInt(time.Time(t).Unix(), 10)), nil
+}
+
+// UnmarshalJSON unmarshals timestamp integer in milliseconds into Time struct.
+func (t *jsonTime) UnmarshalJSON(s []byte) (err error) {
+	q, err := strconv.ParseInt(string(s), 10, 64)
+	if err != nil {
+		return err
+	}
+	*(*time.Time)(t) = time.Unix(q/1000, 0)
+	return
+}
+
+func (t jsonTime) String() string { return time.Time(t).String() }
+
+// jsonBool defines customized JSON unmarshal function for converting
+// integer into boolean.
+type jsonBool bool
+
+// UnmarshalJSON converts input string or integer into a boolean value.
+func (b jsonBool) UnmarshalJSON(s []byte) (err error) {
+	bs := string(s)
+	if bs == "0" || bs == "false" {
+		b = false
+	} else if bs == "1" || bs == "true" {
+		b = true
+	} else {
+		err = fmt.Errorf("Cannot unmarshal value to boolean: %s", bs)
+	}
+	return
+}
 
 // Token holds the data structure of the Toon API access token.
 type Token struct {
@@ -38,6 +76,93 @@ type Agreement struct {
 	DisplaySoftwareVersion string `json:"displaySoftwareVersion"`
 	IsToonSolar            bool   `json:"isToonSolar"`
 	IsToonly               bool   `json:"isToonly"`
+}
+
+// ThermostatStates holds the data structure of the last states retrieved from
+// the getStatus interface of the Toon API.
+type ThermostatStates struct {
+	State                  []ThermostatState `json:"state"`
+	LastUpdatedFromDisplay jsonTime          `json:"lastUpdatedFromDisplay,int"`
+}
+
+// ThermostatState holds the data structure of a state retrieved from the getStatus
+// interface of the Toon API.
+type ThermostatState struct {
+	ID        int `json:"id"`
+	TempValue int `json:"tempValue"`
+	Dhw       int `json:"dhw"`
+}
+
+// ThermostatInfo holds the data structure of the thermostat information retrieved
+// from the getStatus interface of the Toon API.
+type ThermostatInfo struct {
+	CurrentSetPoint        int      `json:"currentSetpoint"`
+	CurrentDisplayTemp     int      `json:"currentDisplayTemp"`
+	ProgramState           int      `json:"programState"`
+	ActiveState            int      `json:"activeState"`
+	NextProgram            int      `json:"nextProgram"`
+	NextState              int      `json:"nextState"`
+	NextTime               int      `json:"nextTime"`
+	NextSetPoint           int      `json:"nextSetpoint"`
+	ErrorFound             int      `json:"errorFound"`
+	BoilerModuleConnected  int      `json:"boilerModuleConnected"`
+	RealSetPoint           int      `json:"realSetpoint"`
+	BurnerInfo             string   `json:"burnerInfo"`
+	OtCommError            string   `json:"otCommError"`
+	CurrentModulationLevel int      `json:"currentModulationLevel"`
+	HaveOTBoiler           int      `json:"haveOTBoiler"`
+	LastUpdatedFromDisplay jsonTime `json:"lastUpdatedFromDisplay,int"`
+}
+
+// PowerUsage holds the data structure of the current power consumption retrieved from
+// the getStatus interface of the Toon API.
+type PowerUsage struct {
+	Value                  int      `json:"value"`
+	DayCost                float32  `json:"dayCost,int"`
+	ValueProduced          int      `json:"valueProduced"`
+	DayCostProduced        int      `json:"dayCostProduced"`
+	ValueSolar             int      `json:"valueSolar"`
+	MaxSolar               int      `json:"maxSolar"`
+	DayCostSolar           int      `json:"dayCostSolar"`
+	AvgSolarValue          int      `json:"avgSolarValue"`
+	AvgValue               float32  `json:"avgValue"`
+	AvgDayValue            float32  `json:"avgDayValue"`
+	AvgProduValue          int      `json:"avgProduValue"`
+	AvgDayProduValue       int      `json:"avgDayProduValue"`
+	MeterReading           int      `json:"meterReading"`
+	MeterReadingLow        int      `json:"meterReadingLow"`
+	MeterReadingProdu      int      `json:"meterReadingProdu"`
+	MeterReadingLowProdu   int      `json:"meterReadingLowProdu"`
+	DayUsage               int      `json:"dayUsage"`
+	DayLowUsage            int      `json:"dayLowUsage"`
+	TodayLowestUsage       int      `json:"todayLowestUsage"`
+	IsSmart                jsonBool `json:"isSmart,int"`
+	LowestDayValue         int      `json:"lowestDayValue"`
+	SolarProducedToday     int      `json:"solarProducedToday"`
+	LastUpdatedFromDisplay jsonTime `json:"lastUpdatedFromDisplay,int"`
+}
+
+// GasUsage holds the data structure of the current gas consumption retrieved from
+// the getStatus interface of the Toon API.
+type GasUsage struct {
+	Value                  int      `json:"value"`
+	DayCost                float32  `json:"dayCost"`
+	AvgValue               float32  `json:"avgValue"`
+	MeterReading           int      `json:"meterReading"`
+	AvgDayValue            float32  `json:"avgDayValue"`
+	DayUsage               int      `json:"dayUsage"`
+	IsSmart                jsonBool `json:"isSmart,int"`
+	LastUpdatedFromDisplay jsonTime `json:"lastUpdatedFromDisplay,int"`
+}
+
+// Status holds the main data structure of the current Toon device status retrieved
+// from the getStatus interface of the Toon API.
+type Status struct {
+	ThermostatStates      ThermostatStates `json:"thermostatStates"`
+	ThermostatInfo        ThermostatInfo   `json:"thermostatInfo"`
+	PowerUsage            PowerUsage       `json:"powerUsage"`
+	GasUsage              GasUsage         `json:"gasUsage"`
+	LastUpdateFromDisplay jsonTime         `json:"lastUpdateFromDisplay,int"`
 }
 
 // Toon provides interface to access and retrieve data from the Toon device,
@@ -110,7 +235,6 @@ func (t *Toon) getAccessToken() (err error) {
 	if code == "" {
 		err = fmt.Errorf("fail extracting code, header: +%v", r.Header)
 	}
-	log.Printf("code: " + code)
 
 	// step 3: call https://api.toon.eu/token to get the access token
 	v = url.Values{}
@@ -131,8 +255,6 @@ func (t *Toon) getAccessToken() (err error) {
 		return
 	}
 
-	log.Printf(string(bodyBytes))
-
 	// unmarshal response body to Token struct
 	if err = json.Unmarshal(bodyBytes, &(t.accessToken)); err != nil {
 		return
@@ -142,6 +264,11 @@ func (t *Toon) getAccessToken() (err error) {
 	t.accessToken.ExpiresAt = tnow.Add(time.Second * time.Duration(t.accessToken.ExpiresIn-180))
 	t.accessToken.RefreshTokenExpiresAt = tnow.Add(time.Second * time.Duration(t.accessToken.RefreshTokenExpiresIn-180))
 
+	return
+}
+
+func (t *Toon) refreshAccessToken() (err error) {
+	// TODO: try to refresh the token using the token refresh function
 	return
 }
 
@@ -161,27 +288,29 @@ func (t *Toon) hasValidToken() (isValid bool) {
 
 	// the token has expired; but we can try to renew the token
 	if t.accessToken.ExpiresAt.Before(time.Now()) {
-		isValid = false
-		return
-	} else {
-		// TODO: try to refresh the token using the token refresh function
+		// given the refresh token is still valid, try refreshing the access token.
+		if err := t.refreshAccessToken(); err != nil {
+			isValid = false
+			return
+		}
 	}
 
-	isValid = true
+	// finally check whether the current/refreshed access token is valid.
+	isValid = t.accessToken.ExpiresAt.Before(time.Now())
 	return
 }
 
 // GetAgreements gets identifier information of accessible Toon devices.
 func (t *Toon) GetAgreements() (agreements []Agreement, err error) {
 
-	if ! t.hasValidToken() {
+	if !t.hasValidToken() {
 		if err = t.getAccessToken(); err != nil {
 			return
 		}
 	}
 
 	c := newHTTPSClient()
-	req, err := http.NewRequest("GET", agreementURL, nil)
+	req, err := http.NewRequest("GET", apiBaseURL+"/agreements", nil)
 	if err != nil {
 		return
 	}
@@ -198,7 +327,73 @@ func (t *Toon) GetAgreements() (agreements []Agreement, err error) {
 		return
 	}
 
+	if res.StatusCode != 200 {
+		err = fmt.Errorf("Cannot get agreements: %s", string(bodyBytes))
+		return
+	}
+
 	err = json.Unmarshal(bodyBytes, &agreements)
+	return
+}
+
+// GetStatus returns current information about the thermostat status,
+// and usages of electricity and gas of a Toon device identified by the
+// given Agreement.
+//
+// The information is retrieved via the Toon API endpoint:
+// https://api.toon.eu/toon/v3/{Agreement.AgreementID}/status
+func (t *Toon) GetStatus(agreement Agreement) (status Status, err error) {
+
+	if &(agreement.AgreementID) == nil {
+		err = fmt.Errorf("Invalid agreement: %+v", agreement)
+		return
+	}
+
+	if !t.hasValidToken() {
+		if err = t.getAccessToken(); err != nil {
+			return
+		}
+	}
+
+	c := newHTTPSClient()
+	for {
+		req, err := http.NewRequest("GET", apiBaseURL+"/"+agreement.AgreementID+"/status", nil)
+		if err != nil {
+			break
+		}
+		req.Header.Set("authorization", "Bearer "+t.accessToken.AccessToken)
+		req.Header.Set("accept", "application/json")
+		req.Header.Set("cache-control", "no-cache")
+		req.Header.Set("content-type", "application/json")
+		res, err := c.Do(req)
+		if err != nil {
+			break
+		}
+
+		// read the response body
+		bodyBytes, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			break
+		}
+
+		// the data is retrieved. Unmarshal the JSON document into
+		// the Status data structure.
+		if res.StatusCode == 200 {
+			err = json.Unmarshal(bodyBytes, &status)
+			break
+		}
+
+		// the server may accept the request, and require the client to
+		// retrieve the information later.  Looks like the information
+		// of device is retrieved on demand??
+		// In this case, the client receive status 202, and we need to
+		// send the same request again with the same access token until
+		// we got the data.
+		if res.StatusCode != 202 {
+			err = fmt.Errorf("Error getting status: %s", string(bodyBytes))
+			break
+		}
+	}
 	return
 }
 
