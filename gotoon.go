@@ -44,12 +44,12 @@ func (t jsonTime) String() string { return time.Time(t).String() }
 type jsonBool bool
 
 // UnmarshalJSON converts input string or integer into a boolean value.
-func (b jsonBool) UnmarshalJSON(s []byte) (err error) {
+func (b *jsonBool) UnmarshalJSON(s []byte) (err error) {
 	bs := string(s)
 	if bs == "0" || bs == "false" {
-		b = false
+		*b = false
 	} else if bs == "1" || bs == "true" {
-		b = true
+		*b = true
 	} else {
 		err = fmt.Errorf("Cannot unmarshal value to boolean: %s", bs)
 	}
