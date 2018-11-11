@@ -357,7 +357,8 @@ func (t *Toon) GetStatus(agreement Agreement) (status Status, err error) {
 
 	c := newHTTPSClient()
 	for {
-		req, err := http.NewRequest("GET", apiBaseURL+"/"+agreement.AgreementID+"/status", nil)
+		var req *http.Request
+		req, err = http.NewRequest("GET", apiBaseURL+"/"+agreement.AgreementID+"/status", nil)
 		if err != nil {
 			break
 		}
@@ -365,13 +366,16 @@ func (t *Toon) GetStatus(agreement Agreement) (status Status, err error) {
 		req.Header.Set("accept", "application/json")
 		req.Header.Set("cache-control", "no-cache")
 		req.Header.Set("content-type", "application/json")
-		res, err := c.Do(req)
+
+		var res *http.Response
+		res, err = c.Do(req)
 		if err != nil {
 			break
 		}
 
 		// read the response body
-		bodyBytes, err := ioutil.ReadAll(res.Body)
+		var bodyBytes []byte
+		bodyBytes, err = ioutil.ReadAll(res.Body)
 		if err != nil {
 			break
 		}
