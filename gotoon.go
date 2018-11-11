@@ -56,8 +56,8 @@ func (b *jsonBool) UnmarshalJSON(s []byte) (err error) {
 	return
 }
 
-// Token holds the data structure of the Toon API access token.
-type Token struct {
+// token holds the data structure of the Toon API access token.
+type token struct {
 	AccessToken           string `json:"access_token"`
 	ExpiresIn             int    `json:"expires_in,string"`
 	ExpiresAt             time.Time
@@ -195,7 +195,7 @@ type Toon struct {
 	// ConsumerSecret is the consumer secret of the Toon API, see https://developer.toon.eu/authentication
 	ConsumerSecret string
 	// accessToken is the current Toon API access token, see https://developer.toon.eu/authentication
-	accessToken Token
+	accessToken token
 }
 
 // getAccessToken authorise the user to get the access token for retriving data
