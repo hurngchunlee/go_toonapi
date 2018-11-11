@@ -90,7 +90,7 @@ func ExampleToon_GetAgreements() {
 	}
 }
 
-// The code below shows how to get current status of the Toon device.
+// The code below shows how to get current status of Toon devices.
 func ExampleToon_GetStatus() {
 	toon := gotoon.Toon{
 		Username:       "myEnecoUsername",
