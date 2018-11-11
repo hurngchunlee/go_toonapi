@@ -165,6 +165,22 @@ type Status struct {
 	LastUpdateFromDisplay jsonTime         `json:"lastUpdateFromDisplay,int"`
 }
 
+// FlowDataPoint holds the data structure of the consumption data points.
+type FlowDataPoint struct {
+	Timestamp jsonTime `json:"timestamp,int"`
+	Unit      string   `json:"unit"`
+	Value     float32  `json:"value"`
+}
+
+// FlowData holds the data structure of the consumption data.
+type FlowData struct {
+	Hours  []FlowDataPoint `json:"hours"`
+	Days   []FlowDataPoint `json:"days"`
+	Weeks  []FlowDataPoint `json:"weeks"`
+	Months []FlowDataPoint `json:"months"`
+	Years  []FlowDataPoint `json:"years"`
+}
+
 // Toon provides interface to access and retrieve data from the Toon device,
 // using the Toon RESTful APIs, see https://developer.toon.eu.
 type Toon struct {
@@ -190,21 +206,22 @@ func (t *Toon) getAccessToken() (err error) {
 
 	// step 1: call https://api.toon.eu/authorize (optionally?)
 	//         with input: client_id, response_type=code, redirect_url=http://127.0.0.1, tenant_id
-	v := url.Values{}
-	v.Set("client_id", t.ConsumerKey)
-	v.Set("response_type", "code")
-	v.Set("redirect_url", "http://127.0.0.1")
-	v.Set("tenant_id", t.TenantID)
+	//         This step doesn't seem to be necessary.  Comment it out for the moment.
+	// v := url.Values{}
+	// v.Set("client_id", t.ConsumerKey)
+	// v.Set("response_type", "code")
+	// v.Set("redirect_url", "http://127.0.0.1")
+	// v.Set("tenant_id", t.TenantID)
 
-	_, err = c.Get(authorizeURL + v.Encode())
-	if err != nil {
-		return
-	}
+	// _, err = c.Get(authorizeURL + v.Encode())
+	// if err != nil {
+	// 	return
+	// }
 
 	// step 2: call https://api.toon.eu/authorize/legacy to get "code" from the returned HTTP header
 	//         with input: client_id, tenant_id, username, password, response_type=code,
 	//         state='', scope=''
-	v = url.Values{}
+	v := url.Values{}
 	v.Set("client_id", t.ConsumerKey)
 	v.Set("tenant_id", t.TenantID)
 	v.Set("username", t.Username)
@@ -341,7 +358,7 @@ func (t *Toon) GetAgreements() (agreements []Agreement, err error) {
 // given Agreement.
 //
 // The information is retrieved via the Toon API endpoint:
-// https://api.toon.eu/toon/v3/{Agreement.AgreementID}/status
+// https://api.toon.eu/toon/v3/{agreement.AgreementID}/status
 func (t *Toon) GetStatus(agreement Agreement) (status Status, err error) {
 
 	if &(agreement.AgreementID) == nil {
@@ -398,6 +415,72 @@ func (t *Toon) GetStatus(agreement Agreement) (status Status, err error) {
 			break
 		}
 	}
+	return
+}
+
+// GetGasFlow retrieves gas consumption information from a given Toon device
+// for a given time period in 5-minute intervals.  The Toon device is referred
+// by the agreement parameter, and the time period is indicated by the from-
+// and toTime parameters.
+//
+// The information is retrieved via the Toon API endpoint:
+// https://api.toon.eu/toon/v3/{agreement.AgreementID}/consumption/gas/flows
+func (t *Toon) GetGasFlow(agreement Agreement, fromTime, toTime time.Time) (flow FlowData, err error) {
+	if &(agreement.AgreementID) == nil {
+		err = fmt.Errorf("Invalid agreement: %+v", agreement)
+		return
+	}
+
+	if !t.hasValidToken() {
+		if err = t.getAccessToken(); err != nil {
+			return
+		}
+	}
+
+	c := newHTTPSClient()
+	var req *http.Request
+	var res *http.Response
+	var bodyBytes []byte
+
+	// compose API endpoint
+	endpointURL := apiBaseURL + "/" + agreement.AgreementID + "/consumption/gas/flows"
+	req, err = http.NewRequest("GET", endpointURL, nil)
+	if err != nil {
+		return
+	}
+
+	// add query parameter values to the request
+	v := req.URL.Query()
+	if (time.Time{}) != fromTime {
+		v.Add("fromTime", fmt.Sprintf("%d", 1000*fromTime.Unix()))
+	}
+	if (time.Time{}) != toTime {
+		v.Add("toTime", fmt.Sprintf("%d", 1000*toTime.Unix()))
+	}
+	req.URL.RawQuery = v.Encode()
+
+	req.Header.Set("authorization", "Bearer "+t.accessToken.AccessToken)
+	req.Header.Set("accept", "application/json")
+	req.Header.Set("cache-control", "no-cache")
+	req.Header.Set("content-type", "application/json")
+
+	res, err = c.Do(req)
+	if err != nil {
+		return
+	}
+
+	// read the response body
+	bodyBytes, err = ioutil.ReadAll(res.Body)
+	if err != nil {
+		return
+	}
+
+	if res.StatusCode != 200 {
+		err = fmt.Errorf("Error getting gas consumption flow: %s", string(bodyBytes))
+	}
+
+	err = json.Unmarshal(bodyBytes, &flow)
+
 	return
 }
 
