@@ -1,15 +1,17 @@
 /*
 
 Package gotoon is a Go library for accessing the Toon (https://www.toon.eu) smart thermostat,
-using the Toon RESTful API (https://developer.toon.eu).
+using the Toon API (https://developer.toon.eu).
 
 Installation
+
+Use the following command to install the library.
 
     go get -u github.com/hurngchunlee/gotoon
 
 Usage
 
-A small example:
+A small example of retriving the current status and device information.
 
     package main
 
@@ -20,18 +22,23 @@ A small example:
 
     func main() {
 
-        // Initialize Toon with authentication credentials.
-	toon := gotoon.Toon{
-		Username:       "myEnecoUsername",
-		Password:       "myEnecoPassword",
-		TenantID:       "eneco",
-		ConsumerKey:    "ToonAPIConsumerKey",
-		ConsumerSecret: "ToonAPIConsumerSecret",
-	}
+        // step 1: initialize Toon with authentication credentials.
+        toon := gotoon.Toon{
+            TenantID:       "eneco",
+            Username:       "myEnecoUsername",
+            Password:       "myEnecoPassword",
+            ConsumerKey:    "ToonAPIConsumerKey",
+            ConsumerSecret: "ToonAPIConsumerSecret",
+        }
 
-        // Call method to retrieve information or interact with the Toon device.
-        // Example 1: Get agreementIds.
-	agreements, err := toon.GetAgreements()
+        // step 2: retrieve the agreements.
+        agreements, _ := toon.GetAgreements()
+
+        // step 3: retrieve status and information.
+        for _, agreement := range agreements {
+            status, _ := toon.GetStatus(agreement)
+            fmt.Printf("%+v\n", status)
+        }
 
     }
 
