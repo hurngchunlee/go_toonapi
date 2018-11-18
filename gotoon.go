@@ -284,8 +284,37 @@ func (t *Toon) getAccessToken() (err error) {
 	return
 }
 
+// refreshAccessToken retrieved a new token with user credential, using the valid refresh_token.
+// The function doesn't check the validity of the refresh_token; thus the caller must ensure it.
+//
+// Once the token is successfully refreshed, the accessToken is updated.
 func (t *Toon) refreshAccessToken() (err error) {
-	// TODO: try to refresh the token using the token refresh function
+	v := url.Values{}
+	v.Set("client_id", t.ConsumerKey)
+	v.Set("client_secret", t.ConsumerSecret)
+	v.Set("grant_type", "refresh_token")
+	v.Set("refresh_token", t.accessToken.RefreshToken)
+
+	c := newHTTPSClient()
+	r, err := c.PostForm(tokenURL, v)
+	if err != nil {
+		return
+	}
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return
+	}
+
+	// unmarshal response body to Token struct
+	if err = json.Unmarshal(bodyBytes, &(t.accessToken)); err != nil {
+		return
+	}
+
+	// derive ExpiresAt = tnow + (ExpiresIn - 180)s
+	tnow := time.Now()
+	t.accessToken.ExpiresAt = tnow.Add(time.Second * time.Duration(t.accessToken.ExpiresIn-180))
+	t.accessToken.RefreshTokenExpiresAt = tnow.Add(time.Second * time.Duration(t.accessToken.RefreshTokenExpiresIn-180))
+
 	return
 }
 
@@ -442,6 +471,32 @@ func (t *Toon) apiGet(apiURL string, query url.Values) (httpBodyBytes []byte, er
 
 		// other code: 4xx, 5xx, etc.
 		err = fmt.Errorf("GET error: %s", string(httpBodyBytes))
+	}
+
+	return
+}
+
+// apiPostForm is a generic method for making Form POST request to the given API URL with provided
+// formData.
+// On success (http status code 200), it returns the response body in byte slice; othewise
+// the error.
+func (t *Toon) apiPostForm(apiURL string, formData url.Values) (httpBodyBytes []byte, err error) {
+
+	if !t.hasValidToken() {
+		if err = t.getAccessToken(); err != nil {
+			return
+		}
+	}
+
+	c := newHTTPSClient()
+	res, err := c.PostForm(apiURL, formData)
+	if err != nil {
+		return
+	}
+
+	httpBodyBytes, err = ioutil.ReadAll(res.Body)
+	if err != nil {
+		return
 	}
 
 	return
