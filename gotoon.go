@@ -320,32 +320,9 @@ func (t *Toon) hasValidToken() (isValid bool) {
 // GetAgreements gets identifier information of accessible Toon devices.
 func (t *Toon) GetAgreements() (agreements []Agreement, err error) {
 
-	if !t.hasValidToken() {
-		if err = t.getAccessToken(); err != nil {
-			return
-		}
-	}
-
-	c := newHTTPSClient()
-	req, err := http.NewRequest("GET", apiBaseURL+"/agreements", nil)
+	var bodyBytes []byte
+	bodyBytes, err = t.apiGet(apiBaseURL+"/agreements", url.Values{})
 	if err != nil {
-		return
-	}
-	req.Header.Set("authorization", "Bearer "+t.accessToken.AccessToken)
-	req.Header.Set("cache-control", "no-cache")
-	req.Header.Set("content-type", "application/json")
-	res, err := c.Do(req)
-	if err != nil {
-		return
-	}
-
-	bodyBytes, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return
-	}
-
-	if res.StatusCode != 200 {
-		err = fmt.Errorf("Cannot get agreements: %s", string(bodyBytes))
 		return
 	}
 
@@ -366,55 +343,14 @@ func (t *Toon) GetStatus(agreement Agreement) (status Status, err error) {
 		return
 	}
 
-	if !t.hasValidToken() {
-		if err = t.getAccessToken(); err != nil {
-			return
-		}
+	var bodyBytes []byte
+	bodyBytes, err = t.apiGet(apiBaseURL+"/"+agreement.AgreementID+"/status", url.Values{})
+	if err != nil {
+		return
 	}
 
-	c := newHTTPSClient()
-	for {
-		var req *http.Request
-		req, err = http.NewRequest("GET", apiBaseURL+"/"+agreement.AgreementID+"/status", nil)
-		if err != nil {
-			break
-		}
-		req.Header.Set("authorization", "Bearer "+t.accessToken.AccessToken)
-		req.Header.Set("accept", "application/json")
-		req.Header.Set("cache-control", "no-cache")
-		req.Header.Set("content-type", "application/json")
+	err = json.Unmarshal(bodyBytes, &status)
 
-		var res *http.Response
-		res, err = c.Do(req)
-		if err != nil {
-			break
-		}
-
-		// read the response body
-		var bodyBytes []byte
-		bodyBytes, err = ioutil.ReadAll(res.Body)
-		if err != nil {
-			break
-		}
-
-		// the data is retrieved. Unmarshal the JSON document into
-		// the Status data structure.
-		if res.StatusCode == 200 {
-			err = json.Unmarshal(bodyBytes, &status)
-			break
-		}
-
-		// the server may accept the request, and require the client to
-		// retrieve the information later.  Looks like the information
-		// of device is retrieved on demand??
-		// In this case, the client receive status 202, and we need to
-		// send the same request again with the same access token until
-		// we got the data.
-		if res.StatusCode != 202 {
-			err = fmt.Errorf("Error getting status: %s", string(bodyBytes))
-			break
-		}
-	}
 	return
 }
 
@@ -431,6 +367,31 @@ func (t *Toon) GetGasFlow(agreement Agreement, fromTime, toTime time.Time) (flow
 		return
 	}
 
+	v := url.Values{}
+	if (time.Time{}) != fromTime {
+		v.Add("fromTime", fmt.Sprintf("%d", 1000*fromTime.Unix()))
+	}
+	if (time.Time{}) != toTime {
+		v.Add("toTime", fmt.Sprintf("%d", 1000*toTime.Unix()))
+	}
+
+	var bodyBytes []byte
+	bodyBytes, err = t.apiGet(apiBaseURL+"/"+agreement.AgreementID+"/consumption/gas/flows", v)
+	if err != nil {
+		return
+	}
+
+	err = json.Unmarshal(bodyBytes, &flow)
+
+	return
+}
+
+// apiGet is a generic method for making GET request to the given API URL with optional
+// query parameters.
+// On success (http status code 200), it returns the response body in byte slice; othewise
+// the error.
+func (t *Toon) apiGet(apiURL string, query url.Values) (httpBodyBytes []byte, err error) {
+
 	if !t.hasValidToken() {
 		if err = t.getAccessToken(); err != nil {
 			return
@@ -438,48 +399,50 @@ func (t *Toon) GetGasFlow(agreement Agreement, fromTime, toTime time.Time) (flow
 	}
 
 	c := newHTTPSClient()
-	var req *http.Request
-	var res *http.Response
-	var bodyBytes []byte
 
-	// compose API endpoint
-	endpointURL := apiBaseURL + "/" + agreement.AgreementID + "/consumption/gas/flows"
-	req, err = http.NewRequest("GET", endpointURL, nil)
-	if err != nil {
-		return
+	for {
+		var req *http.Request
+		var res *http.Response
+
+		req, err = http.NewRequest("GET", apiURL, nil)
+		if err != nil {
+			return
+		}
+		// add query parameter values to the request
+		req.URL.RawQuery = query.Encode()
+
+		// set request header
+		req.Header.Set("authorization", "Bearer "+t.accessToken.AccessToken)
+		req.Header.Set("accept", "application/json")
+		req.Header.Set("cache-control", "no-cache")
+		req.Header.Set("content-type", "application/json")
+
+		// make request
+		res, err = c.Do(req)
+		if err != nil {
+			return
+		}
+
+		// 202 ACCEPTED
+		if res.StatusCode == 202 {
+			// request accepted but server is still processing the request.
+			continue
+		}
+
+		httpBodyBytes, err = ioutil.ReadAll(res.Body)
+		if err != nil {
+			return
+		}
+
+		// 200 OK
+		if res.StatusCode == 200 {
+			// the HTTP call is successful
+			break
+		}
+
+		// other code: 4xx, 5xx, etc.
+		err = fmt.Errorf("GET error: %s", string(httpBodyBytes))
 	}
-
-	// add query parameter values to the request
-	v := req.URL.Query()
-	if (time.Time{}) != fromTime {
-		v.Add("fromTime", fmt.Sprintf("%d", 1000*fromTime.Unix()))
-	}
-	if (time.Time{}) != toTime {
-		v.Add("toTime", fmt.Sprintf("%d", 1000*toTime.Unix()))
-	}
-	req.URL.RawQuery = v.Encode()
-
-	req.Header.Set("authorization", "Bearer "+t.accessToken.AccessToken)
-	req.Header.Set("accept", "application/json")
-	req.Header.Set("cache-control", "no-cache")
-	req.Header.Set("content-type", "application/json")
-
-	res, err = c.Do(req)
-	if err != nil {
-		return
-	}
-
-	// read the response body
-	bodyBytes, err = ioutil.ReadAll(res.Body)
-	if err != nil {
-		return
-	}
-
-	if res.StatusCode != 200 {
-		err = fmt.Errorf("Error getting gas consumption flow: %s", string(bodyBytes))
-	}
-
-	err = json.Unmarshal(bodyBytes, &flow)
 
 	return
 }
